@@ -43,6 +43,50 @@ const sessionsByAddress = new Map<string, MailSession>();
 const addressByAlias = new Map<string, string>();
 let cachedDomains: { domains: string[]; expiresAt: number } | null = null;
 
+const COOKIE_KEY = crypto.createHash("sha256")
+  .update(process.env.JWT_SECRET || "temp-mail-generator-session-key")
+  .digest();
+
+export function encodeSessionCookie(session: MailSession): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", COOKIE_KEY, iv);
+  const payload = JSON.stringify({
+    address: session.address,
+    password: session.password,
+    token: session.token,
+    createdAt: session.createdAt,
+    expiresAt: session.expiresAt,
+  });
+  const encrypted = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString("base64url");
+}
+
+export function restoreSessionCookie(value?: string): MailSession | null {
+  if (!value) return null;
+  try {
+    const raw = Buffer.from(value, "base64url");
+    if (raw.length < 29) return null;
+    const decipher = crypto.createDecipheriv("aes-256-gcm", COOKIE_KEY, raw.subarray(0, 12));
+    decipher.setAuthTag(raw.subarray(12, 28));
+    const parsed = JSON.parse(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8"));
+    if (!parsed.address || !parsed.password || !parsed.token) return null;
+    if (Number(parsed.expiresAt) <= Date.now()) return null;
+    const session: MailSession = {
+      id: parsed.address,
+      address: normalizeAddress(parsed.address),
+      password: String(parsed.password),
+      token: String(parsed.token),
+      createdAt: Number(parsed.createdAt) || Date.now(),
+      expiresAt: Number(parsed.expiresAt),
+    };
+    sessionsByAddress.set(session.address, session);
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeAddress(address: string): string {
   return address.trim().toLowerCase();
 }
@@ -107,6 +151,26 @@ async function loginToMailtm(address: string, password: string): Promise<string>
   return json.token;
 }
 
+async function createAccountWithRetry(address: string, password: string): Promise<Response> {
+  let response = await fetch(`${API_BASE}/accounts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
+    body: JSON.stringify({ address, password }),
+  });
+
+  for (let attempt = 0; attempt < 2 && response.status === 429; attempt++) {
+    const retryAfter = Number(response.headers.get("retry-after") || 2);
+    await new Promise((resolve) => setTimeout(resolve, Math.min(10_000, Math.max(1_000, retryAfter * 1_000))));
+    response = await fetch(`${API_BASE}/accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
+      body: JSON.stringify({ address, password }),
+    });
+  }
+
+  return response;
+}
+
 export async function createMailSession(requestedLogin?: string, requestedDomain?: string): Promise<MailSession> {
   const activeDomains = await getActiveDomains();
   const domain = requestedDomain && activeDomains.includes(requestedDomain.toLowerCase())
@@ -126,14 +190,7 @@ export async function createMailSession(requestedLogin?: string, requestedDomain
   const password = `Tmp_${crypto.randomBytes(9).toString("hex")}!9A`;
 
   // Try creating an account
-  const createRes = await fetch(`${API_BASE}/accounts`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": USER_AGENT,
-    },
-    body: JSON.stringify({ address, password }),
-  });
+  const createRes = await createAccountWithRetry(address, password);
 
   let accountId = "";
   if (createRes.ok) {
@@ -143,14 +200,7 @@ export async function createMailSession(requestedLogin?: string, requestedDomain
     // If username is taken, generate unique address
     const uniqueLogin = `${finalLogin}${crypto.randomInt(100, 999)}`;
     const uniqueAddress = `${uniqueLogin}@${domain}`;
-    const uniqueRes = await fetch(`${API_BASE}/accounts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": USER_AGENT,
-      },
-      body: JSON.stringify({ address: uniqueAddress, password }),
-    });
+    const uniqueRes = await createAccountWithRetry(uniqueAddress, password);
 
     if (!uniqueRes.ok) {
       const errText = await uniqueRes.text().catch(() => "");

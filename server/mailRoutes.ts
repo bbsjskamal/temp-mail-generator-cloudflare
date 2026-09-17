@@ -8,8 +8,26 @@ import {
   fetchAttachmentBuffer,
   extendSessionLifetime,
   deleteMessage,
+  encodeSessionCookie,
+  restoreSessionCookie,
 } from "./mailService";
 import { getSampleVerificationMessage } from "./sampleVerification";
+
+function readMailboxCookie(req: express.Request) {
+  const raw = req.headers.cookie || "";
+  const match = raw.match(/(?:^|;\s*)tm_session=([^;]+)/);
+  return restoreSessionCookie(match?.[1]);
+}
+
+function setMailboxCookie(res: express.Response, session: Awaited<ReturnType<typeof createMailSession>>) {
+  res.cookie("tm_session", encodeSessionCookie(session), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: Math.max(1, session.expiresAt - Date.now()),
+    path: "/",
+  });
+}
 
 export function registerMailApiRoutes(app: express.Express) {
   // Health & diagnostics
@@ -45,6 +63,7 @@ export function registerMailApiRoutes(app: express.Express) {
     try {
       const { login, domain } = req.body || {};
       const session = await createMailSession(login, domain);
+      setMailboxCookie(res, session);
       res.json({
         success: true,
         address: session.address,
@@ -79,6 +98,7 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
+      readMailboxCookie(req);
       const list = await fetchMessages(String(login), String(domain));
       if (list.length === 0 && simulate === "true") {
         const sample = getSampleVerificationMessage(`${login}@${domain}`);
@@ -108,6 +128,7 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
+      readMailboxCookie(req);
       const details = await fetchMessageDetails(String(login), String(domain), String(id));
       res.json(details);
     } catch (error: any) {
@@ -131,6 +152,7 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
+      readMailboxCookie(req);
       const { buffer, contentType, filename } = await fetchAttachmentBuffer(
         String(login),
         String(domain),
@@ -158,6 +180,7 @@ export function registerMailApiRoutes(app: express.Express) {
       if (id === "sample-verification-code") {
         details = getSampleVerificationMessage(`${login}@${domain}`).details;
       } else {
+        readMailboxCookie(req);
         details = await fetchMessageDetails(String(login), String(domain), String(id));
       }
 
@@ -189,6 +212,7 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
+      readMailboxCookie(req);
       const ok = await deleteMessage(String(login), String(domain), String(id));
       res.json({ success: ok });
     } catch (error: any) {

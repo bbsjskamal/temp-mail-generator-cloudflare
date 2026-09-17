@@ -373,20 +373,38 @@ export default function App() {
       const generatedUsername = `${randomName}${randomNum}`;
       const fullAddress = `${generatedUsername}@${randomDomain}`;
 
-      setUsername(generatedUsername);
-      setActiveDomain(randomDomain);
-      setEmailAddress(fullAddress);
-      setTimeLeft(600); // 10 minutes default
+      // Provision the real provider mailbox before showing it to the user.
+      // Previously the UI displayed a locally fabricated address and only
+      // created the Mail.tm account on the first poll, which could happen
+      // after a sender had already attempted delivery.
+      const provisionRes = await fetch("/api/mailbox/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: generatedUsername, domain: randomDomain }),
+      });
+      const provisioned = await provisionRes.json().catch(() => ({}));
+      if (!provisionRes.ok || !provisioned.success || !provisioned.address) {
+        throw new Error(provisioned.error || "The temporary mailbox provider could not create an inbox.");
+      }
+
+      const [provisionedLogin, provisionedDomain] = String(provisioned.address).split("@");
+      const provisionedExpiry = Date.now() + Number(provisioned.expiresInSeconds || 600) * 1000;
+
+      setUsername(provisionedLogin || generatedUsername);
+      setActiveDomain(provisionedDomain || randomDomain);
+      setEmailAddress(provisioned.address || fullAddress);
+      setTimeLeft(Math.max(1, Math.floor((provisionedExpiry - Date.now()) / 1000)));
       setSelectedMessage(null);
       setMessages([]);
       isFirstFetch.current = true;
       
-      localStorage.setItem("tempmail_username", generatedUsername);
-      localStorage.setItem("tempmail_domain", randomDomain);
-      localStorage.setItem("tempmail_email", fullAddress);
-      localStorage.setItem("tempmail_expiry_timestamp", String(Date.now() + 600000));
+      localStorage.setItem("tempmail_username", provisionedLogin || generatedUsername);
+      localStorage.setItem("tempmail_domain", provisionedDomain || randomDomain);
+      localStorage.setItem("tempmail_email", provisioned.address || fullAddress);
+      localStorage.setItem("tempmail_expiry_timestamp", String(provisionedExpiry));
     } catch (e) {
       console.error("Failed to generate mailbox", e);
+      setBackendStatus("unavailable");
     }
   };
 
@@ -425,17 +443,9 @@ export default function App() {
         return;
       }
 
-      if (savedUser && savedDomain && savedEmail && savedExpiry) {
-        const expTime = Number(savedExpiry);
-        const remSecs = Math.floor((expTime - Date.now()) / 1000);
-        if (remSecs > 5) {
-          setUsername(savedUser);
-          setActiveDomain(savedDomain);
-          setEmailAddress(savedEmail);
-          setTimeLeft(remSecs);
-          return;
-        }
-      }
+      // Do not restore a client-only address after a server restart. Mail.tm
+      // credentials are server-owned, so the old local address may no longer
+      // have a usable token. Provision first, then persist the live address.
       await generateNewMailbox(domainList);
     };
     initMailbox();
@@ -599,27 +609,46 @@ export default function App() {
   };
 
   // Save the custom username/domain selected by user
-  const handleSaveCustomAddress = (e: React.FormEvent) => {
+  const handleSaveCustomAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customUsername.trim()) return;
 
     const cleanUser = customUsername.toLowerCase().replace(/[^a-z0-9._+-]/g, "");
     if (!cleanUser) return;
 
-    const fullAddress = `${cleanUser}@${customDomain}`;
-    setUsername(cleanUser);
-    setActiveDomain(customDomain);
-    setEmailAddress(fullAddress);
+    try {
+      const response = await fetch("/api/mailbox/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: cleanUser, domain: customDomain }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.address) {
+        throw new Error(result.error || "The provider rejected this custom address.");
+      }
+
+      const [realUsername, realDomain] = String(result.address).split("@");
+      const fullAddress = result.address;
+      const expiry = Date.now() + Number(result.expiresInSeconds || 600) * 1000;
+      setUsername(realUsername || cleanUser);
+      setActiveDomain(realDomain || customDomain);
+      setEmailAddress(fullAddress);
+      setBackendStatus("available");
+      localStorage.setItem("tempmail_username", realUsername || cleanUser);
+      localStorage.setItem("tempmail_domain", realDomain || customDomain);
+      localStorage.setItem("tempmail_email", fullAddress);
+      localStorage.setItem("tempmail_expiry_timestamp", String(expiry));
+    } catch (error) {
+      console.error("Failed to create custom mailbox", error);
+      setBackendStatus("unavailable");
+      return;
+    }
     setTimeLeft(600); // Reset timer to 10 minutes
     setSelectedMessage(null);
     setMessages([]);
     isFirstFetch.current = true;
     setIsCustomizing(false);
 
-    localStorage.setItem("tempmail_username", cleanUser);
-    localStorage.setItem("tempmail_domain", customDomain);
-    localStorage.setItem("tempmail_email", fullAddress);
-    localStorage.setItem("tempmail_expiry_timestamp", String(Date.now() + 600000));
   };
 
   // Toggle saving an incoming message locally
