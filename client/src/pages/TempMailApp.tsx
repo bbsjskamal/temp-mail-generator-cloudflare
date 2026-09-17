@@ -4,7 +4,7 @@ import {
   ShieldCheck, HelpCircle, Info, ChevronRight, BookOpen, 
   MessageSquare, Download, Sun, Moon, FileText, Lock, 
   AlertCircle, ExternalLink, Eye, Send, Globe, Star, UploadCloud,
-  Smartphone, Play, Bot, Zap, Chrome, ChevronDown, ChevronUp,
+  Play, ChevronDown, ChevronUp,
   Apple, Shield, Flame, Compass, QrCode, User, MailOpen, Volume2, VolumeX,
   Twitter, Github, Instagram, Linkedin
 } from "lucide-react";
@@ -76,6 +76,13 @@ export default function App() {
     const d = new Date(dateStr);
     return isNaN(d.getTime()) ? new Date() : d;
   }, []);
+
+  const formatCountdown = (seconds: number) => {
+    const safe = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(safe / 60).toString().padStart(2, "0");
+    const remainingSeconds = (safe % 60).toString().padStart(2, "0");
+    return `${minutes}:${remainingSeconds}`;
+  };
 
   // Theme State (Premium Light Theme with white background is standard)
   const [darkMode, setDarkMode] = useState<boolean>(false);
@@ -1254,6 +1261,17 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Per-mailbox expiration countdown */}
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/25 px-4 py-3">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Mailbox expires in</span>
+                </div>
+                <span className={`font-mono text-xl font-black tracking-widest ${timeLeft <= 60 ? "text-red-500" : "text-emerald-700 dark:text-emerald-300"}`}>
+                  {formatCountdown(timeLeft)}
+                </span>
+              </div>
+
               {/* Card Subtitle and Optional Power Actions Underneath */}
               <div className="flex flex-col sm:flex-row items-center justify-between pt-1 text-xs gap-3">
                 <div className="flex items-center space-x-1.5 text-slate-400 dark:text-gray-400 font-medium">
@@ -1286,23 +1304,6 @@ export default function App() {
             </div>
           </div>
         </div>
-        
-        {/* Live Syncing Badge moved below the message box card */}
-        <AnimatePresence>
-          {(600 - timeLeft) < 180 && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex justify-center -mt-4 mb-8"
-            >
-              <div className="flex items-center gap-2 px-3.5 py-1.5 bg-white dark:bg-[#161b22] text-emerald-600 dark:text-emerald-400 rounded-full text-[11px] font-black animate-pulse border border-emerald-100 dark:border-emerald-800 shadow-lg shadow-emerald-500/5">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span className="uppercase tracking-widest">Live Syncing Active</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* 3. INTERACTIVE MESSAGES / SAVED PANEL */}
         <div className="bg-white dark:bg-[#161b22] border border-slate-150 dark:border-gray-800 rounded-3xl p-6 sm:p-8 shadow-sm">
@@ -1785,54 +1786,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 5. APPS AND EXTENSIONS GRID (REARRANGED & EXPANDED FREE ONES) */}
-        <div className="space-y-6">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-display font-black text-gray-900 dark:text-white tracking-tight">
-              {t.appsAndExtensions}
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-semibold">
-              {lang === "en" && "Enjoy fast and convenient access to generate temporary emails from anywhere with our 100% free apps and extensions"}
-              {lang === "es" && "Disfrute de un acceso rápido y conveniente para generar correos temporales desde cualquier lugar con nuestras aplicaciones y extensiones 100% gratuitas"}
-              {lang === "zh" && "通过我们 100% 免费的应用程序和扩展程序，随时随地享受快速便捷的临时电子邮件生成体验"}
-              {lang === "hi" && "हमारे 100% मुफ़्त ऐप्स और एक्सटेंशन के साथ कहीं से भी अस्थायी ईमेल जेनरेट करने के लिए तेज़ और सुविधाजनक पहुंच का आनंद लें"}
-              {lang === "fr" && "Profitez d'un accès rapide et pratique pour générer des e-mails temporaires de n'importe où grâce à nos applications et extensions 100 % gratuites"}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-5 gap-3.5">
-            {[
-              { name: "Chrome Extension", icon: Chrome, label: "Add-on", color: "bg-red-500/10 text-red-500 border border-red-500/15" },
-              { name: "Firefox Add-on", icon: Flame, label: "Add-on", color: "bg-orange-500/10 text-orange-500 border border-orange-500/15" },
-              { name: "Safari Extension", icon: Compass, label: "Safari", color: "bg-blue-500/10 text-blue-500 border border-blue-500/15" },
-              { name: "Microsoft Edge", icon: ExternalLink, label: "Add-on", color: "bg-cyan-500/10 text-cyan-500 border border-cyan-500/15" },
-              { name: "Opera Extension", icon: Zap, label: "Opera", color: "bg-rose-500/10 text-rose-500 border border-rose-500/15" },
-              { name: "Brave Extension", icon: Shield, label: "Brave", color: "bg-amber-600/10 text-amber-600 border border-amber-500/15" },
-              { name: "PWA Mobile App", icon: Smartphone, label: "Add to Home", color: "bg-emerald-500/10 text-emerald-500 border border-emerald-500/15" },
-              { name: "Safari Web Clip", icon: Apple, label: "iOS Safari", color: "bg-slate-800/10 text-slate-800 dark:text-slate-300 dark:bg-slate-800/40 border border-slate-500/15" },
-              { name: "Telegram Bot", icon: Send, label: "Bot Channel", color: "bg-sky-500/10 text-sky-500 border border-sky-500/15" },
-              { name: "Discord Bot", icon: Bot, label: "Bot Integration", color: "bg-indigo-500/10 text-indigo-500 border border-indigo-500/15" }
-            ].map((app, idx) => {
-              const AppIcon = app.icon;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setActiveModal("download")}
-                  className="p-4 bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-800 rounded-2xl text-center hover:border-blue-600 transition-all duration-200 flex flex-col items-center gap-2.5 cursor-pointer hover:shadow-md shadow-sm"
-                >
-                  <div className={`p-2.5 rounded-xl ${app.color}`}>
-                    <AppIcon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-[11px] font-bold text-gray-900 dark:text-white leading-tight">{app.name}</h4>
-                    <span className="text-[9px] text-gray-400 uppercase tracking-wider block font-mono mt-0.5">{app.label}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* 6. FAQ ACCORDION LIST (NORMAL INTERNET-FAMILIAR FONT SANS) */}
         <div className="space-y-6 max-w-3xl mx-auto" id="faq-section">
           <div className="text-center space-y-1">
@@ -2101,19 +2054,7 @@ export default function App() {
                 <li><button onClick={() => setActiveModal("tools")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">API Endpoint</button></li>
                 <li><button onClick={() => handleChangeAddress()} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Custom Domains</button></li>
                 <li><button onClick={() => handleExtendLifetime(3)} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">3 Minute Mail</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Telegram Bot</button></li>
                 <li><button onClick={() => setActiveModal("about")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">About Us</button></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white uppercase tracking-wider font-mono text-[10px] font-bold mb-3.5">Apps & Extensions</h4>
-              <ul className="space-y-2.5 text-gray-400">
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">iOS App Client</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Android Native</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Chrome Extension</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Firefox Add-on</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Opera Extension</button></li>
-                <li><button onClick={() => setActiveModal("download")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Microsoft Edge</button></li>
               </ul>
             </div>
             <div>
@@ -2133,6 +2074,7 @@ export default function App() {
                 <li><button onClick={() => setActiveModal("contact")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Contact Us</button></li>
                 <li><button onClick={() => setActiveModal("privacy")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Privacy Policy</button></li>
                 <li><button onClick={() => setActiveModal("terms")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Terms of Service</button></li>
+                <li><button onClick={() => setActiveModal("cookies")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Cookie Policy</button></li>
               </ul>
             </div>
           </div>
@@ -2158,16 +2100,7 @@ export default function App() {
               <span className="text-[11px] font-bold text-gray-300">{LANGUAGES.find(l => l.code === lang)?.name}</span>
             </div>
 
-            {/* PWA / Mobile Web Optimized Info Badge */}
-            <div className="max-w-md bg-slate-900 border border-blue-950/60 p-4 rounded-2xl flex items-start gap-3.5 text-left mt-2 shadow-inner">
-              <Smartphone className="w-5 h-5 text-blue-400 shrink-0 mt-0.5 animate-pulse" />
-              <div>
-                <h5 className="font-bold text-xs text-white leading-tight mb-0.5">Mobile Web Optimized PWA</h5>
-                <p className="text-[10px] text-gray-400 font-medium leading-relaxed">No app store download required. Simply add this website to your mobile home screen via browser settings for direct, full-screen standalone utility access.</p>
-              </div>
-            </div>
-
-            {/* Dummy Social Media Icons */}
+            {/* Social links */}
             <div className="flex items-center justify-center space-x-3 pt-2">
               <a 
                 href="#" 
@@ -2238,7 +2171,7 @@ export default function App() {
                     {activeModal === "contact" && "Contact Support Team"}
                     {activeModal === "privacy" && "Privacy & Identity Policy"}
                     {activeModal === "terms" && "Terms of Service Agreement"}
-                    {activeModal === "download" && "Apps & Extensions Client"}
+                    {activeModal === "cookies" && "Cookie Policy"}
                     {activeModal === "about" && "About TempMail"}
                   </h3>
                 </div>
@@ -2672,37 +2605,6 @@ export default function App() {
                   </form>
                 )}
 
-                {/* DOWNLOAD CLIENTS */}
-                {activeModal === "download" && (
-                  <div className="space-y-6 text-center">
-                    <Smartphone className="w-10 h-10 text-blue-600 dark:text-blue-400 mx-auto" />
-                    <div className="space-y-2">
-                      <h4 className="text-lg font-display font-black text-gray-900 dark:text-white">Multi-platform Access Apps</h4>
-                      <p className="text-xs text-gray-400">Generate temporary emails directly from your devices without opening any browser tabs.</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                      {[
-                        { title: "Browser Extensions", desc: "Lightweight toolbars for Chrome, Firefox, Safari, Edge, and Opera.", icon: Chrome },
-                        { title: "PWA Mobile App", desc: "Simply install directly from your mobile browser settings for standalone full-screen access.", icon: Smartphone },
-                        { title: "Telegram Channel Bot", desc: "Interact, create mailboxes, and read payloads right inside Telegram chat streams.", icon: Send },
-                        { title: "Developer API Bundle", desc: "Staging integration endpoints for end-to-end automation suites.", icon: Zap }
-                      ].map((item, idx) => {
-                        const ItemIcon = item.icon;
-                        return (
-                          <div key={idx} className="p-4 bg-gray-50 dark:bg-[#0d1117] rounded-xl border border-gray-200 dark:border-gray-850 flex items-start gap-3">
-                            <div className="p-2 bg-blue-600/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0"><ItemIcon className="w-4.5 h-4.5" /></div>
-                            <div>
-                              <h5 className="font-bold text-xs text-gray-900 dark:text-white leading-tight">{item.title}</h5>
-                              <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{item.desc}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 {/* ABOUT US */}
                 {activeModal === "about" && (
                   <div className="space-y-4">
@@ -2715,7 +2617,7 @@ export default function App() {
                 {activeModal === "privacy" && (
                   <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
                     <div className="border-b border-gray-100 dark:border-gray-800 pb-3 mb-3">
-                      <p className="text-[10px] text-gray-400 font-mono">Last updated: July 2, 2026</p>
+                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
                       <p className="mt-1 text-gray-500">At TempMail, accessible from our website, one of our main priorities is the privacy of our visitors. This Privacy Policy document contains types of information that is collected and recorded by TempMail and how we use it.</p>
                     </div>
 
@@ -2759,7 +2661,7 @@ export default function App() {
 
                     <div className="space-y-3">
                       <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">8. CCPA Privacy Rights (Do Not Sell My Personal Info)</h5>
-                      <p>Under the CCPA, among other rights, California consumers have the right to request that a business that collects a consumer's personal data disclose the categories and specific pieces of personal data that a business has collected about consumers, request that a business delete any personal data about the consumer that a business has collected, and request that a business disclose that they do not sell the consumer's personal data. Since we do not collect, store, or sell any personal data of any users, we are fully CCPA compliant.</p>
+                      <p>Under the CCPA, among other rights, California consumers have the right to request that a business that collects a consumer's personal data disclose the categories and specific pieces of personal data that a business has collected about consumers, request that a business delete any personal data about the consumer that a business has collected, and request that a business disclose that they do not sell the consumer's personal data. We do not sell personal information. Temporary mailbox content is processed to deliver the requested service and is automatically removed when the mailbox expires, subject to provider and operational limits.</p>
                     </div>
 
                     <div className="space-y-3">
@@ -2771,7 +2673,7 @@ export default function App() {
                         <li>The right to erasure – You have the right to request that we erase your personal data, under certain conditions.</li>
                         <li>The right to restrict processing – You have the right to request that we restrict the processing of your personal data, under certain conditions.</li>
                       </ul>
-                      <p className="mt-2">Since we handle all received emails entirely in-memory and perform automated wipes on expiration, no permanent personal records are maintained on our systems.</p>
+                      <p className="mt-2">Since we handle mail content is retained only for the short active-mailbox period needed to display it; users should not send sensitive personal, financial, medical, or confidential information to a disposable address.</p>
                     </div>
 
                     <div className="space-y-3">
@@ -2785,7 +2687,7 @@ export default function App() {
                 {activeModal === "terms" && (
                   <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
                     <div className="border-b border-gray-100 dark:border-gray-800 pb-3 mb-3">
-                      <p className="text-[10px] text-gray-400 font-mono">Last updated: July 2, 2026</p>
+                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
                       <p className="mt-1 text-gray-500">Welcome to TempMail. These terms and conditions outline the rules and regulations for the use of TempMail's Website. By accessing this website we assume you accept these terms and conditions. Do not continue to use TempMail if you do not agree to take all of the terms and conditions stated on this page.</p>
                     </div>
 
@@ -2807,6 +2709,7 @@ export default function App() {
                     <div className="space-y-3">
                       <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">3. Prohibited Activities</h5>
                       <p>You are specifically restricted from all of the following:</p>
+                      <p className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-red-700 dark:text-red-300">Do not use temporary addresses for fraud, impersonation, phishing, banking or financial-account abuse, evading identity or age checks, harassment, malware distribution, or any activity that violates law or another service's rules.</p>
                       <ul className="list-disc pl-5 space-y-1">
                         <li>Using this Website in any way that is or may be damaging to this Website;</li>
                         <li>Using this Website in any way that impacts user access to this Website;</li>
@@ -2840,6 +2743,28 @@ export default function App() {
                     <div className="space-y-3">
                       <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">8. Governing Law & Jurisdiction</h5>
                       <p>These Terms will be governed by and interpreted in accordance with the laws of the jurisdiction in which the operator resides, and you submit to the non-exclusive jurisdiction of the state and federal courts located in the country for the resolution of any disputes.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* COOKIE POLICY */}
+                {activeModal === "cookies" && (
+                  <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
+                    <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
+                      <p className="mt-2">Temp-Mail-Generator.site uses a small number of cookies and browser storage items to keep the site functional. We do not use cookies to read the contents of your inbox.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Essential storage</h5>
+                      <p>We use a local browser preference to remember your language, theme, saved messages, and cookie-consent choice. The mailbox session itself is handled by a secure, HttpOnly server cookie and expires with the temporary mailbox.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Analytics and advertising</h5>
+                      <p>If analytics or advertising is enabled in a future deployment, those providers may set their own cookies only under their published policies and applicable consent requirements. The current application does not require advertising cookies to generate or receive email.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Your choices</h5>
+                      <p>You can clear browser storage or block cookies in your browser settings. Blocking essential storage may prevent the site from remembering preferences or maintaining the active mailbox session.</p>
                     </div>
                   </div>
                 )}
@@ -3044,7 +2969,7 @@ export default function App() {
             className="fixed bottom-0 left-0 right-0 z-[60] bg-white dark:bg-[#161b22] border-t border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto rounded-t-3xl"
           >
             <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold max-w-3xl text-center sm:text-left leading-relaxed">
-              We use cookies on this site to enhance your user experience, retain your current burner email inbox, and deliver personalized contextual sponsorships. By continuing, you agree to our privacy conditions.
+              We use essential cookies and browser storage to keep your temporary mailbox and preferences working. No advertising cookies are required. Read our <button onClick={() => setActiveModal("cookies")} className="text-[#00b074] hover:underline bg-transparent border-0 p-0 font-bold cursor-pointer">Cookie Policy</button> for details.
             </p>
             <button
               onClick={acceptCookies}
