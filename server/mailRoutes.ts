@@ -11,7 +11,59 @@ import {
   encodeSessionCookie,
   restoreSessionCookie,
 } from "./mailService";
-import { getSampleVerificationMessage } from "./sampleVerification";
+
+const requestLimits = new Map<string, { count: number; resetAt: number }>();
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS_PER_WINDOW = 30;
+
+function requestIp(req: express.Request): string {
+  return req.ip || req.socket.remoteAddress || "anonymous";
+}
+
+function allowRequest(req: express.Request, res: express.Response, limit = MAX_REQUESTS_PER_WINDOW): boolean {
+  const now = Date.now();
+  const key = requestIp(req);
+  const current = requestLimits.get(key);
+  const entry = !current || current.resetAt <= now
+    ? { count: 0, resetAt: now + WINDOW_MS }
+    : current;
+  entry.count += 1;
+  requestLimits.set(key, entry);
+  res.setHeader("X-RateLimit-Remaining", Math.max(0, limit - entry.count));
+  if (entry.count > limit) {
+    res.setHeader("Retry-After", "60");
+    res.status(429).json({ error: "Too many requests. Please wait a minute and try again." });
+    return false;
+  }
+  return true;
+}
+
+function cleanParam(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function safeMessageId(value: unknown): string {
+  const id = cleanParam(value, 128);
+  return /^[A-Za-z0-9_-]+$/.test(id) ? id : "";
+}
+
+function safeAttachmentUrl(value: unknown): string {
+  const url = cleanParam(value, 1024);
+  if (url.startsWith("/api/") && !url.includes("//")) return url;
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === "https://api.mail.tm" ? url : "";
+  } catch {
+    return "";
+  }
+}
+
+function publicError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : "";
+  if (/429|rate limit|too many/i.test(message)) return "The mail provider is temporarily busy. Please try again shortly.";
+  if (/expired|not found|404/i.test(message)) return "This mailbox or message has expired.";
+  return fallback;
+}
 
 function readMailboxCookie(req: express.Request) {
   const raw = req.headers.cookie || "";
@@ -43,7 +95,7 @@ export function registerMailApiRoutes(app: express.Express) {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      res.status(500).json({ status: "error", message: String(error) });
+      res.status(503).json({ status: "error", message: "Health check temporarily unavailable." });
     }
   });
 
@@ -60,9 +112,12 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // Explicit session creation / generation endpoint
   app.post("/api/mailbox/new", async (req, res) => {
+    if (!allowRequest(req, res, 12)) return;
     try {
-      const { login, domain } = req.body || {};
-      const session = await createMailSession(login, domain);
+      const body = req.body || {};
+      const login = cleanParam(body.login, 64);
+      const domain = cleanParam(body.domain, 255);
+      const session = await createMailSession(login || undefined, domain || undefined);
       setMailboxCookie(res, session);
       res.json({
         success: true,
@@ -71,8 +126,8 @@ export function registerMailApiRoutes(app: express.Express) {
         createdAt: session.createdAt,
       });
     } catch (error: any) {
-      console.error("[API] /api/mailbox/new failed:", error);
-      res.status(500).json({ success: false, error: error.message || "Failed to create mailbox" });
+      console.error("[API] /api/mailbox/new failed:", error instanceof Error ? error.name : "unknown");
+      res.status(/429|rate limit/i.test(String(error)) ? 429 : 503).json({ success: false, error: publicError(error, "Mailbox creation is temporarily unavailable. Please try again shortly.") });
     }
   });
 
@@ -86,45 +141,35 @@ export function registerMailApiRoutes(app: express.Express) {
       const secondsLeft = extendSessionLifetime(String(login), String(domain), Number(minutes) || 10);
       res.json({ success: true, expiresInSeconds: secondsLeft });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to extend lifetime" });
+      res.status(503).json({ error: publicError(error, "Mailbox lifetime could not be extended right now.") });
     }
   });
 
   // Inbox list endpoint
   app.get("/api/messages", async (req, res) => {
-    const { login, domain, simulate } = req.query;
+    if (!allowRequest(req, res)) return;
+    const login = cleanParam(req.query.login, 64);
+    const domain = cleanParam(req.query.domain, 255);
     if (!login || !domain) {
       return res.status(400).json({ error: "Parameters 'login' and 'domain' are required" });
     }
 
     try {
       readMailboxCookie(req);
-      const list = await fetchMessages(String(login), String(domain));
-      if (list.length === 0 && simulate === "true") {
-        const sample = getSampleVerificationMessage(`${login}@${domain}`);
-        return res.json([sample.summary]);
-      }
+      const list = await fetchMessages(login, domain);
       res.json(list);
     } catch (error: any) {
-      console.error("[API] /api/messages failed:", error);
-      if (simulate === "true") {
-        const sample = getSampleVerificationMessage(`${login}@${domain}`);
-        return res.json([sample.summary]);
-      }
-      res.status(500).json({ error: error.message || "Failed to load inbox" });
+      console.error("[API] /api/messages failed:", error instanceof Error ? error.name : "unknown");
+      res.status(503).json({ error: publicError(error, "Inbox temporarily unavailable. Please try refreshing shortly.") });
     }
   });
 
   // Message details endpoint
   app.get("/api/message", async (req, res) => {
-    const { login, domain, id } = req.query;
+    const { login, domain } = req.query;
+    const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
       return res.status(400).json({ error: "Parameters 'login', 'domain', and 'id' are required" });
-    }
-
-    if (id === "sample-verification-code") {
-      const sample = getSampleVerificationMessage(`${login}@${domain}`);
-      return res.json(sample.details);
     }
 
     try {
@@ -132,23 +177,17 @@ export function registerMailApiRoutes(app: express.Express) {
       const details = await fetchMessageDetails(String(login), String(domain), String(id));
       res.json(details);
     } catch (error: any) {
-      console.error("[API] /api/message failed:", error);
-      res.status(500).json({ error: error.message || "Failed to load message content" });
+      console.error("[API] /api/message failed:", error instanceof Error ? error.name : "unknown");
+      res.status(503).json({ error: publicError(error, "Message content temporarily unavailable.") });
     }
   });
 
   // Attachment download endpoint
   app.get("/api/download-attachment", async (req, res) => {
-    const { login, domain, downloadUrl } = req.query;
+    const { login, domain } = req.query;
+    const downloadUrl = safeAttachmentUrl(req.query.downloadUrl);
     if (!login || !domain || !downloadUrl) {
       return res.status(400).json({ error: "Parameters 'login', 'domain', and 'downloadUrl' are required" });
-    }
-
-    if (String(downloadUrl).includes("sample-attachment")) {
-      const sampleContent = Buffer.from("Verification Confirmation: Your trial account for Temp-Mail-Generator.site is active.\nStatus: Inbound-only verification enabled.\n");
-      res.setHeader("Content-Type", "text/plain");
-      res.setHeader("Content-Disposition", 'attachment; filename="terms-confirmation.txt"');
-      return res.send(sampleContent);
     }
 
     try {
@@ -163,27 +202,21 @@ export function registerMailApiRoutes(app: express.Express) {
       res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
       res.send(buffer);
     } catch (error: any) {
-      console.error("[API] /api/download-attachment failed:", error);
-      res.status(500).json({ error: error.message || "Failed to download attachment" });
+      console.error("[API] /api/download-attachment failed:", error instanceof Error ? error.name : "unknown");
+      res.status(503).json({ error: publicError(error, "Attachment temporarily unavailable.") });
     }
   });
 
   // EML export endpoint
   app.get("/api/eml", async (req, res) => {
-    const { login, domain, id } = req.query;
+    const { login, domain } = req.query;
+    const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
       return res.status(400).json({ error: "Parameters 'login', 'domain', and 'id' are required" });
     }
 
     try {
-      let details;
-      if (id === "sample-verification-code") {
-        details = getSampleVerificationMessage(`${login}@${domain}`).details;
-      } else {
-        readMailboxCookie(req);
-        details = await fetchMessageDetails(String(login), String(domain), String(id));
-      }
-
+      const details = await fetchMessageDetails(String(login), String(domain), String(id));
       const emlContent = [
         `From: ${details.from}`,
         `To: ${login}@${domain}`,
@@ -200,13 +233,14 @@ export function registerMailApiRoutes(app: express.Express) {
       res.setHeader("Content-Type", "message/rfc822");
       res.send(emlContent);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to export EML" });
+      res.status(503).json({ error: publicError(error, "Message export temporarily unavailable.") });
     }
   });
 
   // Delete message
   app.delete("/api/message", async (req, res) => {
-    const { login, domain, id } = req.query;
+    const { login, domain } = req.query;
+    const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
       return res.status(400).json({ error: "Parameters 'login', 'domain', and 'id' are required" });
     }
@@ -216,18 +250,22 @@ export function registerMailApiRoutes(app: express.Express) {
       const ok = await deleteMessage(String(login), String(domain), String(id));
       res.json({ success: ok });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to delete message" });
+      res.status(503).json({ error: publicError(error, "Message deletion temporarily unavailable.") });
     }
   });
 
   // Contact form submission
   app.post("/api/contact", (req, res) => {
-    const { name, email, subject, message } = req.body || {};
-    if (!name || !email || !subject || !message) {
+    if (!allowRequest(req, res, 5)) return;
+    const name = cleanParam(req.body?.name, 80);
+    const email = cleanParam(req.body?.email, 254);
+    const subject = cleanParam(req.body?.subject, 160);
+    const message = cleanParam(req.body?.message, 4000);
+    if (!name || !email || !subject || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "All contact fields are required." });
     }
 
-    console.log(`[Contact Submission] From: ${name} <${email}> | Subject: ${subject}`);
+    console.log(`[Contact Submission] Received a support request with subject length ${subject.length}`);
     res.json({ success: true, message: "Thank you! Your message has been received." });
   });
 
@@ -269,73 +307,73 @@ export function registerMailApiRoutes(app: express.Express) {
     res.send("d4f2c0ecf9004ddea86b01655385f1da");
   });
 
-  // IndexNow submission proxy
+  // IndexNow submission proxy with strict same-host URL validation.
   app.post("/api/indexnow", async (req, res) => {
-    const { host, key, keyLocation, urlList } = req.body || {};
-    if (!host || !key || !keyLocation || !Array.isArray(urlList) || urlList.length === 0) {
-      return res.status(400).json({ error: "Missing required parameters (host, key, keyLocation, urlList)." });
+    if (!allowRequest(req, res, 3)) return;
+    const host = cleanParam(req.body?.host, 253).toLowerCase();
+    const key = cleanParam(req.body?.key, 128);
+    const keyLocation = cleanParam(req.body?.keyLocation, 2048);
+    const urlList = Array.isArray(req.body?.urlList)
+      ? req.body.urlList.filter((item: unknown): item is string => typeof item === "string").map((item: string) => item.trim()).slice(0, 100)
+      : [];
+    let keyUrl: URL;
+    try {
+      keyUrl = new URL(keyLocation);
+    } catch {
+      return res.status(400).json({ error: "A valid key location URL is required." });
     }
-
+    const validUrls = urlList.length > 0 && urlList.every((item: string) => {
+      try {
+        const url = new URL(item);
+        return url.protocol === "https:" && url.hostname === host;
+      } catch {
+        return false;
+      }
+    });
+    if (!host || !/^[a-z0-9.-]+$/.test(host) || !/^[A-Za-z0-9_-]{16,128}$/.test(key) || keyUrl.protocol !== "https:" || !validUrls) {
+      return res.status(400).json({ error: "Provide a valid HTTPS host, key, key location, and same-host URL list." });
+    }
     try {
       const upstream = await fetch("https://api.indexnow.org/indexnow", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({ host, key, keyLocation, urlList }),
       });
-      const data = await upstream.text().catch(() => "");
-      res.json({
+      res.status(upstream.ok ? 200 : 502).json({
         success: upstream.ok,
-        status: upstream.status,
-        message: upstream.ok ? "Successfully submitted to IndexNow." : `IndexNow responded with status ${upstream.status}`,
-        data,
+        message: upstream.ok ? "Successfully submitted to IndexNow." : "IndexNow could not accept the submission.",
       });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+    } catch (error) {
+      console.error("[API] IndexNow request failed:", error instanceof Error ? error.name : "unknown");
+      res.status(503).json({ success: false, error: "IndexNow is temporarily unavailable." });
     }
   });
 
   // Robots & Sitemaps
   app.get("/robots.txt", (req, res) => {
     const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-    const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+    const appUrl = process.env.APP_URL || "https://temp-mail-generator.site";
     res.type("text/plain");
     res.send(`User-agent: *\nAllow: /\nSitemap: ${appUrl}/sitemap-index.xml\n`);
   });
 
   app.get("/sitemap-index.xml", (req, res) => {
     const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-    const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+    const appUrl = process.env.APP_URL || "https://temp-mail-generator.site";
     res.header("Content-Type", "application/xml; charset=utf-8");
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap><loc>${appUrl}/sitemap-pages.xml</loc></sitemap>
-  <sitemap><loc>${appUrl}/sitemap-domains.xml</loc></sitemap>
 </sitemapindex>`.trim());
   });
 
   app.get("/sitemap-pages.xml", (req, res) => {
     const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-    const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
+    const appUrl = process.env.APP_URL || "https://temp-mail-generator.site";
     res.header("Content-Type", "application/xml; charset=utf-8");
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>${appUrl}/</loc><priority>1.0</priority><changefreq>daily</changefreq></url>
-  <url><loc>${appUrl}/#home</loc><priority>1.0</priority><changefreq>daily</changefreq></url>
-  <url><loc>${appUrl}/#faq</loc><priority>0.8</priority><changefreq>weekly</changefreq></url>
-  <url><loc>${appUrl}/#about</loc><priority>0.7</priority><changefreq>monthly</changefreq></url>
-  <url><loc>${appUrl}/#contact</loc><priority>0.7</priority><changefreq>monthly</changefreq></url>
-</urlset>`.trim());
-  });
-
-  app.get("/sitemap-domains.xml", async (req, res) => {
-    const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-    const appUrl = process.env.APP_URL || `${protocol}://${req.get("host")}`;
-    const domains = await getActiveDomains();
-    const urls = domains.map((domain: string) => `  <url><loc>${appUrl}/domain/${domain}</loc><priority>0.8</priority><changefreq>daily</changefreq></url>`).join("\n");
-    res.header("Content-Type", "application/xml; charset=utf-8");
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
 </urlset>`.trim());
   });
 

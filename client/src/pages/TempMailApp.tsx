@@ -93,6 +93,7 @@ export default function App() {
   const [username, setUsername] = useState<string>("");
   const [domains, setDomains] = useState<string[]>([]);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'available' | 'unavailable'>('checking');
+  const [mailboxError, setMailboxError] = useState<string>("");
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<MailDetails | null>(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(false);
@@ -340,21 +341,14 @@ export default function App() {
       } else {
       }
     }
-    const fallback = [
-      "mail.tm", 
-      "emlpro.com", 
-      "emltmp.com", 
-      "mailtm.com",
-      "secmail.pro",
-      "sharklasers.com",
-      "getmail.it"
-    ];
+    const fallback = ["mail.tm"];
     setDomains(fallback);
     return fallback;
   };
 
   // Core Address Generation
   const generateNewMailbox = async (customDomainList?: string[]) => {
+    setMailboxError("");
     try {
       let activeDomains = customDomainList || domains;
       if (activeDomains.length === 0) {
@@ -412,6 +406,7 @@ export default function App() {
     } catch (e) {
       console.error("Failed to generate mailbox", e);
       setBackendStatus("unavailable");
+      setMailboxError(e instanceof Error ? e.message : "Mailbox creation is temporarily unavailable. Please try again.");
     }
   };
 
@@ -471,29 +466,7 @@ export default function App() {
         let apiMessages: MailMessage[] = [];
         const apiEndpoint = `/api/messages?login=${username}&domain=${activeDomain}`;
         
-        // Check if we should try a direct fetch (Static Fallback)
-        const isStaticManaged = [
-          "sharklasers.com", "grr.la", "getmail.it"
-        ].includes(activeDomain.toLowerCase());
-
-        if (backendStatus === 'unavailable' && isStaticManaged) {
-          // ... existing Guerrilla fallback ...
-          const gmRes = await fetch(`https://www.guerrillamail.com/ajax.php?f=get_email_address&ip=127.0.0.1&agent=Mozilla`);
-          if (gmRes.ok) {
-            const gmData = await gmRes.json();
-            const sid = gmData.sid_token;
-            await fetch(`https://www.guerrillamail.com/ajax.php?f=set_email_user&email_user=${username}&sid_token=${sid}`);
-            const checkRes = await fetch(`https://www.guerrillamail.com/ajax.php?f=check_email&seq=0&sid_token=${sid}`);
-            const checkData = await checkRes.json();
-            apiMessages = (checkData.list || []).map((m: any) => ({
-              id: Number(m.mail_id),
-              from: m.mail_from,
-              subject: m.mail_subject,
-              date: m.mail_date
-            }));
-          }
-        } else {
-          const res = await fetch(apiEndpoint);
+        const res = await fetch(apiEndpoint);
           if (res.ok) {
             apiMessages = await res.json();
           } else {
@@ -508,7 +481,6 @@ export default function App() {
               return performFetch(retries - 1);
             }
           }
-        }
         return apiMessages;
       } catch (err) {
         if (retries > 0) {
@@ -521,6 +493,7 @@ export default function App() {
 
     const apiMessages = await performFetch();
     if (apiMessages === null) {
+      setMailboxError("Inbox temporarily unavailable. Try refresh again in a moment.");
       if (!isAutoRefresh) setIsRefreshing(false);
       return;
     }
@@ -544,8 +517,10 @@ export default function App() {
 
       setMessages(mergedList);
       setLastChecked(new Date());
+      setMailboxError("");
     } catch (e) {
-      console.error("Failed to fetch messages with Firestore backup", e);
+      console.error("Failed to fetch messages", e);
+      setMailboxError("Inbox temporarily unavailable. Try refresh again in a moment.");
     } finally {
       setIsRefreshing(false);
       setIsLoadingMessages(false);
@@ -582,7 +557,7 @@ export default function App() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           generateNewMailbox();
-          return 600;
+          return 0;
         }
         return prev - 1;
       });
@@ -833,7 +808,7 @@ export default function App() {
         if (next >= 100) {
           clearInterval(interval);
           setScannerStatus("clean");
-          setScannerLog((prevLog) => [...prevLog, "Scan complete: No malicious threats detected. Your file is 100% clean and safe!"]);
+          setScannerLog((prevLog) => [...prevLog, "Demo complete: no file was uploaded or analyzed."]);
           return 100;
         }
         if (currentStep < logs.length) {
@@ -1231,6 +1206,7 @@ export default function App() {
                     readOnly
                     value={emailAddress || t.generatingMailbox}
                     onClick={copyToClipboard}
+                    aria-label="Temporary email address"
                     className="flex-1 bg-transparent text-left font-sans font-semibold text-sm sm:text-base text-slate-800 dark:text-white outline-none cursor-pointer tracking-wide px-1 py-1"
                     title="Click to copy"
                     id="mail-address-input"
@@ -1267,10 +1243,16 @@ export default function App() {
                   <Clock className="w-4 h-4" />
                   <span className="text-xs font-bold uppercase tracking-wider">Mailbox expires in</span>
                 </div>
-                <span className={`font-mono text-xl font-black tracking-widest ${timeLeft <= 60 ? "text-red-500" : "text-emerald-700 dark:text-emerald-300"}`}>
+                <span aria-live="polite" aria-label={`Mailbox expires in ${formatCountdown(timeLeft)}`} className={`font-mono text-xl font-black tracking-widest ${timeLeft <= 60 ? "text-red-500" : "text-emerald-700 dark:text-emerald-300"}`}>
                   {formatCountdown(timeLeft)}
                 </span>
               </div>
+
+              {mailboxError && (
+                <div role="alert" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+                  {mailboxError}
+                </div>
+              )}
 
               {/* Card Subtitle and Optional Power Actions Underneath */}
               <div className="flex flex-col sm:flex-row items-center justify-between pt-1 text-xs gap-3">
@@ -1720,7 +1702,7 @@ export default function App() {
             </h2>
             <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 space-y-4 leading-relaxed font-medium">
               <p>
-                {lang === "en" && "Disposable temporary email protects your real email address from spam, advertising mailings, and malware. It's anonymous, ephemeral, and 100% free. All emails and directories are automatically destroyed when the session timer expires or when clicking 'Delete' to secure your absolute identity secrecy."}
+                {lang === "en" && "Disposable temporary email protects your real email address from spam, advertising mailings, and malware. It's anonymous, ephemeral, and 100% free. Messages are removed from the active mailbox when the session timer expires or when you delete the mailbox."}
                 {lang === "es" && "El correo electrónico temporal desechable protege su dirección real de spam, correos publicitarios y malware. Es anónimo, efímero y 100% gratuito. Todos los correos y directorios se destruyen automáticamente cuando expira el tiempo de sesión o al hacer clic en 'Eliminar' para asegurar el secreto absoluto de su identidad."}
                 {lang === "zh" && "一次性临时电子邮件可以保护您的真实电子邮件地址免受垃圾邮件、广告邮件和恶意软件的侵害。它是匿名的、瞬态的，且 100% 免费。当会话计时器过期或单击“删除”时，所有电子邮件和目录都会自动销毁，以确保您的绝对身份机密。"}
                 {lang === "hi" && "डिस्पोजेबल अस्थायी ईमेल आपके वास्तविक ईमेल पते को स्पैम, विज्ञापन मेलिंग और मैलवेयर से बचाता है। यह अनाम, अल्पकालिक और 100% मुफ़्त है। आपकी पूर्ण पहचान गोपनीयता सुरक्षित करने के लिए सत्र टाइमर समाप्त होने पर या 'हटाएं' पर क्लिक करने पर सभी ईमेल और निर्देशिकाएं स्वचालित रूप से नष्ट हो जाती हैं।"}
@@ -1943,7 +1925,7 @@ export default function App() {
               {lang === "fr" && "C'est là que les adresses e-mail temporaires sont très utiles. Une boîte de réception temporaire vous permet de contourner le cycle du spam. Au lieu d'utiliser vos identifiants principaux et d'exposer vos journaux de communication aux pirates, vous pouvez déployer une passerelle jetable qui gère le lien de vérification, puis disparaît automatiquement sans laisser de trace."}
             </p>
             <p>
-              {lang === "en" && "Our service was engineered from the ground up to solve these modern challenges. We process thousands of verifications every second, providing you with a dynamic armor that secures your peace of mind while exploring the open web."}
+              {lang === "en" && "The service is designed for short-lived inboxes that help reduce unwanted mail during legitimate trials, testing, and low-risk sign-ups. Delivery depends on the upstream mail provider and network conditions."}
               {lang === "es" && "Nuestro servicio fue diseñado desde cero para resolver estos desafíos modernos. Procesamos miles de verificaciones cada segundo, proporcionándole una armadura dinámica que asegura su tranquilidad mientras explora la web abierta."}
               {lang === "zh" && "我们的服务专为解决这些现代挑战而设计。我们每秒处理数千次验证，为您提供动态护盾，在您探索开放的网络世界时确保您的心境安宁。"}
               {lang === "hi" && "हमारी सेवा इन आधुनिक चुनौतियों का समाधान करने के लिए शुरू से तैयार की गई थी। हम हर सेकंड हजारों सत्यापन संसाधित करते हैं, जिससे आपको एक गतिशील कवच मिलता है जो खुले वेब की खोज करते समय आपके मानसिक शांति को सुरक्षित करता है।"}
@@ -2342,7 +2324,7 @@ export default function App() {
 
                       {activeToolTab === "virus-scanner" && (
                         <div className="space-y-4">
-                          <p className="text-xs text-gray-400">Instantly audit security integrity of email attachments. Simulated clean sandbox match.</p>
+                          <p className="text-xs text-gray-400">Browser-only demonstration: no file is uploaded or scanned.</p>
                           
                           {scannerStatus === "idle" ? (
                             <div className="border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-center space-y-3">
@@ -2426,7 +2408,7 @@ export default function App() {
                               IndexNow Search Engine Submitter
                             </h4>
                             <p className="text-xs text-gray-400">
-                              Instant-indexation protocol. Notify Bing, Yandex, Seznam, and other major engines that your domain's content has changed or been created.
+                              Submit a verified URL list to IndexNow when you have configured your own domain and key.
                             </p>
                           </div>
 
@@ -2608,8 +2590,8 @@ export default function App() {
                 {/* ABOUT US */}
                 {activeModal === "about" && (
                   <div className="space-y-4">
-                    <p>TempMail is a privacy-first electronic utility built by security engineers to provide instant trash mail and anonymous burner addresses. We process millions of verification codes daily, keeping users safe from spam, tracking databases, and malicious phishing campaigns.</p>
-                    <p>Our infrastructure matches highly scalable, premium routing gateways, ensuring delivery speed inside milliseconds. Everything is fully encrypted in-transit and wiped instantly once the lifetime timer expires.</p>
+                    <p>TempMail-Generator.site is a browser-based utility for creating short-lived inbound email addresses without registration. Use a temporary inbox for low-risk messages only; do not send sensitive information to it.</p>
+                    <p>Mail delivery and availability depend on the upstream provider. Mailbox sessions are designed to expire after the displayed lifetime, and users should download anything they need before expiry.</p>
                   </div>
                 )}
 

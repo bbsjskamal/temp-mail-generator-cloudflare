@@ -180,7 +180,8 @@ export async function createMailSession(requestedLogin?: string, requestedDomain
   const cleanPrefix = (requestedLogin || "")
     .toLowerCase()
     .replace(/[^a-z0-9._+-]/g, "")
-    .slice(0, 24);
+    // Mail providers can impose shorter local-part limits per domain.
+    .slice(0, 12);
 
   const finalLogin = cleanPrefix && cleanPrefix.length >= 3
     ? cleanPrefix
@@ -380,6 +381,10 @@ export async function fetchMessageDetails(login: string, domain: string, message
 export async function fetchAttachmentBuffer(login: string, domain: string, downloadUrl: string): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
   const session = await getOrRefreshSession(login, domain);
   const url = downloadUrl.startsWith("http") ? downloadUrl : `${API_BASE}${downloadUrl}`;
+  const parsedUrl = new URL(url);
+  if (parsedUrl.origin !== API_BASE || !parsedUrl.pathname.startsWith("/attachments/")) {
+    throw new Error("Invalid attachment URL");
+  }
 
   let res = await fetch(url, {
     headers: {
