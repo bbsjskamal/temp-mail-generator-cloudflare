@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+dist
+.git
+.github
+.manus-logs
+*.log
+.env
+.env.*
+!.env.example
+coverage
+.vscode
+.idea
+.DS_Store
+*.zip

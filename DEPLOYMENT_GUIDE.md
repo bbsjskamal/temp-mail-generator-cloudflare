@@ -1,5 +1,7 @@
 # Custom Domain & Deployment Guide
 
+> For the current GitHub-to-Cloud-Run workflow, use [`CLOUD_RUN_GITHUB.md`](./CLOUD_RUN_GITHUB.md). The repository root also contains the production [`Dockerfile`](./Dockerfile) and [`.dockerignore`](./.dockerignore) used by Cloud Build.
+
 ## Overview
 
 This guide provides step-by-step instructions for deploying your rebuilt **Temp-Mail-Generator.site** web application and configuring your custom domain (`temp-mail-generator.site`). The backend has been completely reconstructed to use a legitimate, server-owned **Mail.tm** session lifecycle. All client-side Firestore dependencies and non-functional Guerrilla Mail fallbacks have been removed.
