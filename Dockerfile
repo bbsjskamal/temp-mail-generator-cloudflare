@@ -22,7 +22,9 @@ RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
-RUN pnpm install --prod --frozen-lockfile
+# The bundled server imports the Vite middleware module at startup even in
+# production, so keep the full locked dependency set in the runtime image.
+RUN pnpm install --frozen-lockfile
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 8080
