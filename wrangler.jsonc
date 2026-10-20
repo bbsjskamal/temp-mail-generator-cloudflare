@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "temp-mail-generator-api",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "APP_URL": "https://temp-mail-generator.site",
+    "FRONTEND_ORIGINS": "https://temp-mail-generator.site"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { MailMessage, MailDetails, BlogArticle, FAQItem } from "../types";
 import { FAQ_DATA, BLOG_DATA } from "../data";
 import { Language, LANGUAGES, TRANSLATIONS, FAQ_TRANSLATIONS } from "../translations";
+import { apiFetch, apiUrl } from "../lib/api";
 
 export default function App() {
   const playNotificationSound = () => {
@@ -267,7 +268,7 @@ export default function App() {
     setIndexNowResult(null);
 
     try {
-      const response = await fetch("/api/indexnow", {
+      const response = await apiFetch("/api/indexnow", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -314,12 +315,12 @@ export default function App() {
 
     try {
       // First check general health and connectivity
-      const healthRes = await fetch("/api/health").catch(() => null);
+      const healthRes = await apiFetch("/api/health").catch(() => null);
       if (healthRes && healthRes.ok) {
         const healthData = await healthRes.json();
       }
 
-      const res = await fetch("/api/domains", { signal: controller.signal });
+      const res = await apiFetch("/api/domains", { signal: controller.signal });
       clearTimeout(timeoutId);
       
       if (res.ok) {
@@ -378,7 +379,7 @@ export default function App() {
       // Previously the UI displayed a locally fabricated address and only
       // created the Mail.tm account on the first poll, which could happen
       // after a sender had already attempted delivery.
-      const provisionRes = await fetch("/api/mailbox/new", {
+      const provisionRes = await apiFetch("/api/mailbox/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ login: generatedUsername, domain: randomDomain }),
@@ -466,7 +467,7 @@ export default function App() {
         let apiMessages: MailMessage[] = [];
         const apiEndpoint = `/api/messages?login=${username}&domain=${activeDomain}`;
         
-        const res = await fetch(apiEndpoint);
+        const res = await apiFetch(apiEndpoint);
           if (res.ok) {
             apiMessages = await res.json();
           } else {
@@ -599,7 +600,7 @@ export default function App() {
     if (!cleanUser) return;
 
     try {
-      const response = await fetch("/api/mailbox/new", {
+      const response = await apiFetch("/api/mailbox/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ login: cleanUser, domain: customDomain }),
@@ -689,7 +690,7 @@ export default function App() {
     setIsLoadingContent(true);
 
     try {
-      const res = await fetch(`/api/message?login=${encodeURIComponent(username)}&domain=${encodeURIComponent(activeDomain)}&id=${encodeURIComponent(String(msgId))}`);
+      const res = await apiFetch(`/api/message?login=${encodeURIComponent(username)}&domain=${encodeURIComponent(activeDomain)}&id=${encodeURIComponent(String(msgId))}`);
       if (res.ok) {
         const details = await res.json();
         setSelectedMessage(details);
@@ -709,7 +710,7 @@ export default function App() {
     e.preventDefault();
     setContactLoading(true);
     try {
-      const response = await fetch("/api/contact", {
+      const response = await apiFetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1414,7 +1415,7 @@ export default function App() {
                         {selectedMessage.attachments.map((file, idx) => (
                           <a
                             key={idx}
-                            href={`/api/download-attachment?login=${username}&domain=${activeDomain}&downloadUrl=${encodeURIComponent(file.downloadUrl || "")}`}
+                            href={apiUrl(`/api/download-attachment?login=${username}&domain=${activeDomain}&downloadUrl=${encodeURIComponent(file.downloadUrl || "")}`)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-2.5 py-1.5 bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-850 text-xs font-mono rounded-lg hover:border-[#00b074] text-gray-700 dark:text-gray-300 flex items-center gap-1"

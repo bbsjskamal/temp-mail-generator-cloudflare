@@ -95,7 +95,7 @@ function requireMailboxSession(
 function setMailboxCookie(res: express.Response, session: Awaited<ReturnType<typeof createMailSession>>) {
   res.cookie("tm_session", encodeSessionCookie(session), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" || process.env.CF_WORKERS === "1",
     sameSite: "lax",
     maxAge: Math.max(1, session.expiresAt - Date.now()),
     path: "/",
