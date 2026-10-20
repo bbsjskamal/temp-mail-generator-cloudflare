@@ -30,7 +30,7 @@ export interface MailMessageDetails {
   htmlBody: string;
 }
 
-interface MailSession {
+export interface MailSession {
   id: string;
   address: string;
   password: string;
@@ -43,9 +43,28 @@ const sessionsByAddress = new Map<string, MailSession>();
 const addressByAlias = new Map<string, string>();
 let cachedDomains: { domains: string[]; expiresAt: number } | null = null;
 
+const configuredCookieSecret = process.env.JWT_SECRET;
+if (process.env.NODE_ENV === "production" && !configuredCookieSecret) {
+  throw new Error("JWT_SECRET must be configured in production.");
+}
+
 const COOKIE_KEY = crypto.createHash("sha256")
-  .update(process.env.JWT_SECRET || "temp-mail-generator-session-key")
+  .update(configuredCookieSecret || "development-only-temp-mail-session-key")
   .digest();
+
+function pruneExpiredSessions(now = Date.now()): void {
+  sessionsByAddress.forEach((session, address) => {
+    if (session.expiresAt <= now) {
+      sessionsByAddress.delete(address);
+    }
+  });
+
+  addressByAlias.forEach((address, alias) => {
+    if (!sessionsByAddress.has(address)) {
+      addressByAlias.delete(alias);
+    }
+  });
+}
 
 export function encodeSessionCookie(session: MailSession): string {
   const iv = crypto.randomBytes(12);
@@ -70,16 +89,20 @@ export function restoreSessionCookie(value?: string): MailSession | null {
     const decipher = crypto.createDecipheriv("aes-256-gcm", COOKIE_KEY, raw.subarray(0, 12));
     decipher.setAuthTag(raw.subarray(12, 28));
     const parsed = JSON.parse(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8"));
+    const createdAt = Number(parsed.createdAt);
+    const expiresAt = Number(parsed.expiresAt);
     if (!parsed.address || !parsed.password || !parsed.token) return null;
-    if (Number(parsed.expiresAt) <= Date.now()) return null;
+    if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt)) return null;
+    if (expiresAt <= Date.now() || expiresAt > createdAt + 60 * 60 * 1000) return null;
     const session: MailSession = {
       id: parsed.address,
       address: normalizeAddress(parsed.address),
       password: String(parsed.password),
       token: String(parsed.token),
-      createdAt: Number(parsed.createdAt) || Date.now(),
-      expiresAt: Number(parsed.expiresAt),
+      createdAt,
+      expiresAt,
     };
+    pruneExpiredSessions();
     sessionsByAddress.set(session.address, session);
     return session;
   } catch {
@@ -235,14 +258,21 @@ async function storeSession(address: string, password: string, accountId: string
   return session;
 }
 
-export async function getOrRefreshSession(login: string, domain: string): Promise<MailSession> {
+export async function getOrRefreshSession(login: string, domain: string, ownedSession?: MailSession): Promise<MailSession> {
+  pruneExpiredSessions();
   const key = normalizeKey(login, domain);
+
+  if (ownedSession) {
+    if (normalizeAddress(ownedSession.address) !== key || ownedSession.expiresAt <= Date.now()) {
+      throw new Error("Mailbox session expired or does not match the requested mailbox.");
+    }
+    sessionsByAddress.set(ownedSession.address, ownedSession);
+    return ownedSession;
+  }
+
   const existing = sessionsByAddress.get(key);
 
   if (existing) {
-    if (existing.expiresAt < Date.now()) {
-      existing.expiresAt = Date.now() + 10 * 60 * 1000;
-    }
     return existing;
   }
 
@@ -260,9 +290,11 @@ export async function getOrRefreshSession(login: string, domain: string): Promis
   return created;
 }
 
-export function extendSessionLifetime(login: string, domain: string, addedMinutes = 10): number {
+export function extendSessionLifetime(login: string, domain: string, addedMinutes = 10, ownedSession?: MailSession): number {
+  pruneExpiredSessions();
   const key = normalizeKey(login, domain);
-  const targetKey = addressByAlias.get(key) || key;
+  if (ownedSession && normalizeAddress(ownedSession.address) !== key) return 0;
+  const targetKey = ownedSession?.address || addressByAlias.get(key) || key;
   const session = sessionsByAddress.get(targetKey);
   const now = Date.now();
 
@@ -275,8 +307,8 @@ export function extendSessionLifetime(login: string, domain: string, addedMinute
   return addedMinutes * 60;
 }
 
-export async function fetchMessages(login: string, domain: string): Promise<MailMessageSummary[]> {
-  const session = await getOrRefreshSession(login, domain);
+export async function fetchMessages(login: string, domain: string, ownedSession?: MailSession): Promise<MailMessageSummary[]> {
+  const session = await getOrRefreshSession(login, domain, ownedSession);
 
   const res = await fetch(`${API_BASE}/messages`, {
     headers: {
@@ -325,8 +357,8 @@ function formatMessageList(raw: any[]): MailMessageSummary[] {
   });
 }
 
-export async function fetchMessageDetails(login: string, domain: string, messageId: string): Promise<MailMessageDetails> {
-  const session = await getOrRefreshSession(login, domain);
+export async function fetchMessageDetails(login: string, domain: string, messageId: string, ownedSession?: MailSession): Promise<MailMessageDetails> {
+  const session = await getOrRefreshSession(login, domain, ownedSession);
 
   let res = await fetch(`${API_BASE}/messages/${messageId}`, {
     headers: {
@@ -378,8 +410,8 @@ export async function fetchMessageDetails(login: string, domain: string, message
   };
 }
 
-export async function fetchAttachmentBuffer(login: string, domain: string, downloadUrl: string): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
-  const session = await getOrRefreshSession(login, domain);
+export async function fetchAttachmentBuffer(login: string, domain: string, downloadUrl: string, ownedSession?: MailSession): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+  const session = await getOrRefreshSession(login, domain, ownedSession);
   const url = downloadUrl.startsWith("http") ? downloadUrl : `${API_BASE}${downloadUrl}`;
   const parsedUrl = new URL(url);
   if (parsedUrl.origin !== API_BASE || !parsedUrl.pathname.startsWith("/attachments/")) {
@@ -420,8 +452,8 @@ export async function fetchAttachmentBuffer(login: string, domain: string, downl
   };
 }
 
-export async function deleteMessage(login: string, domain: string, messageId: string): Promise<boolean> {
-  const session = await getOrRefreshSession(login, domain);
+export async function deleteMessage(login: string, domain: string, messageId: string, ownedSession?: MailSession): Promise<boolean> {
+  const session = await getOrRefreshSession(login, domain, ownedSession);
   const res = await fetch(`${API_BASE}/messages/${messageId}`, {
     method: "DELETE",
     headers: {

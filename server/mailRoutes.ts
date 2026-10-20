@@ -10,6 +10,7 @@ import {
   deleteMessage,
   encodeSessionCookie,
   restoreSessionCookie,
+  type MailSession,
 } from "./mailService";
 
 const requestLimits = new Map<string, { count: number; resetAt: number }>();
@@ -29,6 +30,11 @@ function allowRequest(req: express.Request, res: express.Response, limit = MAX_R
     : current;
   entry.count += 1;
   requestLimits.set(key, entry);
+  if (requestLimits.size > 5000) {
+    requestLimits.forEach((item, ip) => {
+      if (item.resetAt <= now) requestLimits.delete(ip);
+    });
+  }
   res.setHeader("X-RateLimit-Remaining", Math.max(0, limit - entry.count));
   if (entry.count > limit) {
     res.setHeader("Retry-After", "60");
@@ -69,6 +75,21 @@ function readMailboxCookie(req: express.Request) {
   const raw = req.headers.cookie || "";
   const match = raw.match(/(?:^|;\s*)tm_session=([^;]+)/);
   return restoreSessionCookie(match?.[1]);
+}
+
+function requireMailboxSession(
+  req: express.Request,
+  res: express.Response,
+  login: string,
+  domain: string,
+): MailSession | null {
+  const session = readMailboxCookie(req);
+  const requestedAddress = `${login.trim().toLowerCase()}@${domain.trim().toLowerCase()}`;
+  if (!session || session.address !== requestedAddress || session.expiresAt <= Date.now()) {
+    res.status(403).json({ error: "This mailbox session is missing, expired, or not authorized." });
+    return null;
+  }
+  return session;
 }
 
 function setMailboxCookie(res: express.Response, session: Awaited<ReturnType<typeof createMailSession>>) {
@@ -133,12 +154,19 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // Extend mailbox lifetime
   app.post("/api/mailbox/extend", async (req, res) => {
+    if (!allowRequest(req, res, 12)) return;
     try {
-      const { login, domain, minutes } = req.body || {};
+      const login = cleanParam(req.body?.login, 64);
+      const domain = cleanParam(req.body?.domain, 255);
+      const minutes = Number(req.body?.minutes);
       if (!login || !domain) {
         return res.status(400).json({ error: "Parameters 'login' and 'domain' are required" });
       }
-      const secondsLeft = extendSessionLifetime(String(login), String(domain), Number(minutes) || 10);
+      const session = requireMailboxSession(req, res, login, domain);
+      if (!session) return;
+      const secondsLeft = extendSessionLifetime(login, domain, Number.isFinite(minutes) ? Math.min(10, Math.max(1, minutes)) : 10, session);
+      if (!secondsLeft) return res.status(403).json({ error: "This mailbox session has expired." });
+      setMailboxCookie(res, session);
       res.json({ success: true, expiresInSeconds: secondsLeft });
     } catch (error: any) {
       res.status(503).json({ error: publicError(error, "Mailbox lifetime could not be extended right now.") });
@@ -155,8 +183,9 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
-      readMailboxCookie(req);
-      const list = await fetchMessages(login, domain);
+      const session = requireMailboxSession(req, res, login, domain);
+      if (!session) return;
+      const list = await fetchMessages(login, domain, session);
       res.json(list);
     } catch (error: any) {
       console.error("[API] /api/messages failed:", error instanceof Error ? error.name : "unknown");
@@ -166,6 +195,7 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // Message details endpoint
   app.get("/api/message", async (req, res) => {
+    if (!allowRequest(req, res)) return;
     const { login, domain } = req.query;
     const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
@@ -173,8 +203,9 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
-      readMailboxCookie(req);
-      const details = await fetchMessageDetails(String(login), String(domain), String(id));
+      const session = requireMailboxSession(req, res, String(login), String(domain));
+      if (!session) return;
+      const details = await fetchMessageDetails(String(login), String(domain), String(id), session);
       res.json(details);
     } catch (error: any) {
       console.error("[API] /api/message failed:", error instanceof Error ? error.name : "unknown");
@@ -184,6 +215,7 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // Attachment download endpoint
   app.get("/api/download-attachment", async (req, res) => {
+    if (!allowRequest(req, res)) return;
     const { login, domain } = req.query;
     const downloadUrl = safeAttachmentUrl(req.query.downloadUrl);
     if (!login || !domain || !downloadUrl) {
@@ -191,11 +223,13 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
-      readMailboxCookie(req);
+      const session = requireMailboxSession(req, res, String(login), String(domain));
+      if (!session) return;
       const { buffer, contentType, filename } = await fetchAttachmentBuffer(
         String(login),
         String(domain),
-        String(downloadUrl)
+        String(downloadUrl),
+        session,
       );
 
       res.setHeader("Content-Type", contentType);
@@ -209,6 +243,7 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // EML export endpoint
   app.get("/api/eml", async (req, res) => {
+    if (!allowRequest(req, res)) return;
     const { login, domain } = req.query;
     const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
@@ -216,7 +251,9 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
-      const details = await fetchMessageDetails(String(login), String(domain), String(id));
+      const session = requireMailboxSession(req, res, String(login), String(domain));
+      if (!session) return;
+      const details = await fetchMessageDetails(String(login), String(domain), String(id), session);
       const emlContent = [
         `From: ${details.from}`,
         `To: ${login}@${domain}`,
@@ -239,6 +276,7 @@ export function registerMailApiRoutes(app: express.Express) {
 
   // Delete message
   app.delete("/api/message", async (req, res) => {
+    if (!allowRequest(req, res)) return;
     const { login, domain } = req.query;
     const id = safeMessageId(req.query.id);
     if (!login || !domain || !id) {
@@ -246,8 +284,9 @@ export function registerMailApiRoutes(app: express.Express) {
     }
 
     try {
-      readMailboxCookie(req);
-      const ok = await deleteMessage(String(login), String(domain), String(id));
+      const session = requireMailboxSession(req, res, String(login), String(domain));
+      if (!session) return;
+      const ok = await deleteMessage(String(login), String(domain), String(id), session);
       res.json({ success: ok });
     } catch (error: any) {
       res.status(503).json({ error: publicError(error, "Message deletion temporarily unavailable.") });
