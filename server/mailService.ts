@@ -44,13 +44,18 @@ const addressByAlias = new Map<string, string>();
 let cachedDomains: { domains: string[]; expiresAt: number } | null = null;
 
 const configuredCookieSecret = process.env.JWT_SECRET;
-if (process.env.NODE_ENV === "production" && !configuredCookieSecret && process.env.CF_WORKERS !== "1") {
-  throw new Error("JWT_SECRET must be configured in production.");
+let cookieKey = configuredCookieSecret
+  ? crypto.createHash("sha256").update(configuredCookieSecret).digest()
+  : null;
+
+export function configureCookieSecret(secret?: string): void {
+  if (secret) cookieKey = crypto.createHash("sha256").update(secret).digest();
 }
 
-const COOKIE_KEY = crypto.createHash("sha256")
-  .update(configuredCookieSecret || "development-only-temp-mail-session-key")
-  .digest();
+function getCookieKey(): Buffer {
+  if (!cookieKey) throw new Error("JWT_SECRET must be configured before mailbox sessions are used.");
+  return cookieKey;
+}
 
 function pruneExpiredSessions(now = Date.now()): void {
   sessionsByAddress.forEach((session, address) => {
@@ -68,7 +73,7 @@ function pruneExpiredSessions(now = Date.now()): void {
 
 export function encodeSessionCookie(session: MailSession): string {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", COOKIE_KEY, iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getCookieKey(), iv);
   const payload = JSON.stringify({
     address: session.address,
     password: session.password,
@@ -86,7 +91,7 @@ export function restoreSessionCookie(value?: string): MailSession | null {
   try {
     const raw = Buffer.from(value, "base64url");
     if (raw.length < 29) return null;
-    const decipher = crypto.createDecipheriv("aes-256-gcm", COOKIE_KEY, raw.subarray(0, 12));
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getCookieKey(), raw.subarray(0, 12));
     decipher.setAuthTag(raw.subarray(12, 28));
     const parsed = JSON.parse(Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8"));
     const createdAt = Number(parsed.createdAt);

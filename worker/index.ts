@@ -15,6 +15,7 @@ process.env.APP_URL = workerEnv.APP_URL || "https://temp-mail-generator.site";
 
 const mailService = await import("../server/mailService");
 const {
+  configureCookieSecret,
   createMailSession,
   deleteMessage,
   encodeSessionCookie,
@@ -25,6 +26,8 @@ const {
   getActiveDomains,
   restoreSessionCookie,
 } = mailService;
+
+configureCookieSecret(workerEnv.JWT_SECRET);
 
 const allowedOrigins = new Set(
   (workerEnv.FRONTEND_ORIGINS || "https://temp-mail-generator.site")
