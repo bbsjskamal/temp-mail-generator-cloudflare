@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { MailMessage, MailDetails, BlogArticle, FAQItem } from "../types";
 import { FAQ_DATA, BLOG_DATA } from "../data";
 import { Language, LANGUAGES, TRANSLATIONS, FAQ_TRANSLATIONS } from "../translations";
+import { LEGAL_TRANSLATIONS } from "../legalTranslations";
 import { apiFetch, apiUrl } from "../lib/api";
 
 export default function App() {
@@ -822,6 +823,7 @@ export default function App() {
   };
 
   const t = TRANSLATIONS[lang];
+  const legal = LEGAL_TRANSLATIONS[lang];
 
   return (
     <div className={darkMode ? "dark text-[#f1f3f9] min-h-screen bg-[#0b1329] font-sans antialiased" : "text-gray-900 min-h-screen bg-[#fafbfe] font-sans antialiased"}>
@@ -888,7 +890,7 @@ export default function App() {
               onClick={() => setActiveModal("privacy")}
               className="text-sm font-bold text-slate-500 hover:text-[#00b074] dark:text-gray-300 dark:hover:text-emerald-400 transition-colors py-1 cursor-pointer bg-transparent border-0"
             >
-              Privacy Policy
+              {t.cookieConsentPrivacy}
             </button>
             <button 
               onClick={() => setActiveModal("contact")}
@@ -1039,7 +1041,7 @@ export default function App() {
                 onClick={() => { setMobileMenuOpen(false); setActiveModal("privacy"); }}
                 className="block w-full text-left py-2 px-3 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl text-xs font-bold"
               >
-                Privacy Policy
+                {t.cookieConsentPrivacy}
               </button>
               <button 
                 onClick={() => { setMobileMenuOpen(false); setActiveModal("contact"); }}
@@ -2055,9 +2057,9 @@ export default function App() {
               <h4 className="text-white uppercase tracking-wider font-mono text-[10px] font-bold mb-3.5">Company</h4>
               <ul className="space-y-2.5 text-gray-400">
                 <li><button onClick={() => setActiveModal("contact")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Contact Us</button></li>
-                <li><button onClick={() => setActiveModal("privacy")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Privacy Policy</button></li>
-                <li><button onClick={() => setActiveModal("terms")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Terms of Service</button></li>
-                <li><button onClick={() => setActiveModal("cookies")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">Cookie Policy</button></li>
+                <li><button onClick={() => setActiveModal("privacy")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">{t.cookieConsentPrivacy}</button></li>
+                <li><button onClick={() => setActiveModal("terms")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">{t.cookieConsentTerms}</button></li>
+                <li><button onClick={() => setActiveModal("cookies")} className="hover:text-white transition-colors bg-transparent border-0 cursor-pointer">{legal.cookiesTitle}</button></li>
               </ul>
             </div>
           </div>
@@ -2152,9 +2154,9 @@ export default function App() {
                     {activeModal === "qrcode" && "Email QR Code"}
                     {activeModal === "tools" && "Advanced Security Tools"}
                     {activeModal === "contact" && "Contact Support Team"}
-                    {activeModal === "privacy" && "Privacy & Identity Policy"}
-                    {activeModal === "terms" && "Terms of Service Agreement"}
-                    {activeModal === "cookies" && "Cookie Policy"}
+                    {activeModal === "privacy" && legal.privacyTitle}
+                    {activeModal === "terms" && legal.termsTitle}
+                    {activeModal === "cookies" && legal.cookiesTitle}
                     {activeModal === "about" && "About TempMail"}
                   </h3>
                 </div>
@@ -2596,159 +2598,23 @@ export default function App() {
                   </div>
                 )}
 
-                {/* PRIVACY POLICY */}
-                {activeModal === "privacy" && (
+                {/* LOCALIZED LEGAL POLICIES */}
+                {(activeModal === "privacy" || activeModal === "terms" || activeModal === "cookies") && (
                   <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
                     <div className="border-b border-gray-100 dark:border-gray-800 pb-3 mb-3">
-                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
-                      <p className="mt-1 text-gray-500">At TempMail, accessible from our website, one of our main priorities is the privacy of our visitors. This Privacy Policy document contains types of information that is collected and recorded by TempMail and how we use it.</p>
+                      <p className="text-[10px] text-gray-400 font-mono">{legal.lastUpdated}</p>
                     </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">1. Consent</h5>
-                      <p>By using our website, you hereby consent to our Privacy Policy and agree to its terms.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">2. Information We Collect</h5>
-                      <p>TempMail is designed to provide fully anonymous, disposable inbox addresses (trash mail). We do NOT ask for or collect any personal information, such as your name, physical address, primary email address, telephone number, or payment details. No registration or account setup is required to utilize our service.</p>
-                      <p>For any contact support submissions, we collect your name, contact email address, and the content of the message or attachments you may send us, which are strictly used for support resolution.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">3. Log Files and Analytics</h5>
-                      <p>TempMail follows a standard procedure of using log files. These files log visitors when they visit websites. All hosting companies do this as part of hosting services' analytics. The information collected by log files includes internet protocol (IP) addresses, browser type, Internet Service Provider (ISP), date and time stamp, referring/exit pages, and possibly the number of clicks. These are not linked to any information that is personally identifiable. The purpose of the information is for analyzing trends, administering the site, tracking users' movement on the website, and gathering demographic information.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">4. Cookies and Web Beacons</h5>
-                      <p>Like any other website, TempMail uses 'cookies'. These cookies are used to store information including visitors' preferences, and the pages on the website that the visitor accessed or visited. The information is used to optimize the users' experience by customizing our web page content based on visitors' browser type and/or other information.</p>
-                      <p>We also utilize standard local browser storage (such as localStorage) solely to preserve your active burner email address name and active messages for the duration of your session, preventing data loss on window refresh.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">5. Google DoubleClick DART Cookie</h5>
-                      <p>Google is one of the third-party vendors on our site. It also uses cookies, known as DART cookies, to serve ads to our site visitors based upon their visit to our site and other sites on the internet. However, visitors may choose to decline the use of DART cookies by visiting the Google ad and content network Privacy Policy at the following URL – <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">https://policies.google.com/technologies/ads</a></p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">6. Our Advertising Partners</h5>
-                      <p>Some of advertisers on our site may use cookies and web beacons. Our advertising partners include Google AdSense. Each of our advertising partners has their own Privacy Policy for their policies on user data. For easier access, we hyperlinked to their Privacy Policies below:</p>
-                      <p>Google: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">https://policies.google.com/technologies/ads</a></p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">7. Third-Party Privacy Policies</h5>
-                      <p>TempMail's Privacy Policy does not apply to other advertisers or websites. Thus, we are advising you to consult the respective Privacy Policies of these third-party ad servers for more detailed information. It may include their practices and instructions about how to opt-out of certain options. You can choose to disable cookies through your individual browser options.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">8. CCPA Privacy Rights (Do Not Sell My Personal Info)</h5>
-                      <p>Under the CCPA, among other rights, California consumers have the right to request that a business that collects a consumer's personal data disclose the categories and specific pieces of personal data that a business has collected about consumers, request that a business delete any personal data about the consumer that a business has collected, and request that a business disclose that they do not sell the consumer's personal data. We do not sell personal information. Temporary mailbox content is processed to deliver the requested service and is automatically removed when the mailbox expires, subject to provider and operational limits.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">9. GDPR Data Protection Rights</h5>
-                      <p>We want to make sure you are fully aware of all of your data protection rights. Every user is entitled to the following:</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>The right to access – You have the right to request copies of your personal data.</li>
-                        <li>The right to rectification – You have the right to request that we correct any information you believe is inaccurate.</li>
-                        <li>The right to erasure – You have the right to request that we erase your personal data, under certain conditions.</li>
-                        <li>The right to restrict processing – You have the right to request that we restrict the processing of your personal data, under certain conditions.</li>
-                      </ul>
-                      <p className="mt-2">Since we handle mail content is retained only for the short active-mailbox period needed to display it; users should not send sensitive personal, financial, medical, or confidential information to a disposable address.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">10. Children's Information</h5>
-                      <p>Another part of our priority is adding protection for children while using the internet. We encourage parents and guardians to observe, participate in, and/or monitor and guide their online activity. TempMail does not knowingly collect any Personal Identifiable Information from children under the age of 13. If you think that your child provided this kind of information on our website, we strongly encourage you to contact us immediately and we will do our best efforts to promptly remove such information from our records.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* TERMS OF SERVICE */}
-                {activeModal === "terms" && (
-                  <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
-                    <div className="border-b border-gray-100 dark:border-gray-800 pb-3 mb-3">
-                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
-                      <p className="mt-1 text-gray-500">Welcome to TempMail. These terms and conditions outline the rules and regulations for the use of TempMail's Website. By accessing this website we assume you accept these terms and conditions. Do not continue to use TempMail if you do not agree to take all of the terms and conditions stated on this page.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">1. Intellectual Property Rights</h5>
-                      <p>Other than the content you own, under these Terms, TempMail and/or its licensors own all the intellectual property rights and materials contained in this Website. You are granted a limited license only for purposes of viewing and utilizing the temporary mailbox routing utility.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">2. Service Scope and Limitations</h5>
-                      <p>TempMail provides inbound-only temporary email addresses and trash mail services.</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li><span className="font-bold text-gray-800 dark:text-white">Outbound Mail Blocked:</span> You are strictly forbidden and technically blocked from dispatching outbound emails using our domains. This prevents spam abuse and maintains high domain reputation.</li>
-                        <li><span className="font-bold text-gray-800 dark:text-white">Ephemeral Storage:</span> All incoming emails, text payloads, and file attachments are stored in-memory for a limited duration of 10 minutes (600 seconds). Upon expiration of the active mailbox timer or manual click of the 'Delete' button, all records are permanently and irreversibly purged from our servers.</li>
-                        <li><span className="font-bold text-gray-800 dark:text-white">In-Memory Lifecycle:</span> All messages and temporary sessions are handled strictly in-memory during active sessions. Upon timer expiration or deletion, all addresses and incoming payloads are permanently erased without persistent storage.</li>
-                      </ul>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">3. Prohibited Activities</h5>
-                      <p>You are specifically restricted from all of the following:</p>
-                      <p className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-3 py-2 text-red-700 dark:text-red-300">Do not use temporary addresses for fraud, impersonation, phishing, banking or financial-account abuse, evading identity or age checks, harassment, malware distribution, or any activity that violates law or another service's rules.</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li>Using this Website in any way that is or may be damaging to this Website;</li>
-                        <li>Using this Website in any way that impacts user access to this Website;</li>
-                        <li>Using this Website contrary to applicable laws and regulations, or in any way may cause harm to the Website, or to any person or business entity;</li>
-                        <li>Engaging in any data mining, data harvesting, data extracting, or any other similar activity in relation to this Website;</li>
-                        <li>Deploying automated registration bots, scrapers, or scripts to abuse the mailboxes or verification systems;</li>
-                        <li>Using the service to facilitate fraudulent activities, account phishing, or online harassment.</li>
-                      </ul>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">4. No Warranties</h5>
-                      <p>This Website is provided 'as is,' with all faults, and TempMail expresses no representations or warranties, of any kind related to this Website or the materials contained on this Website. Also, nothing contained on this Website shall be interpreted as advising you. We make no guarantee of uninterrupted 100% uptime or infinite storage of historical data.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">5. Limitation of Liability</h5>
-                      <p>In no event shall TempMail, nor any of its officers, directors, and employees, be held liable for anything arising out of or in any way connected with your use of this Website whether such liability is under contract. TempMail, including its officers, directors, and employees shall not be held liable for any indirect, consequential, or special liability arising out of or in any way related to your use of this Website or data purging upon timer expiration.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">6. Severability</h5>
-                      <p>If any provision of these Terms is found to be invalid under any applicable law, such provisions shall be deleted without affecting the remaining provisions herein.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">7. Variation of Terms</h5>
-                      <p>TempMail is permitted to revise these Terms at any time as it sees fit, and by using this Website you are expected to review these Terms on a regular basis.</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">8. Governing Law & Jurisdiction</h5>
-                      <p>These Terms will be governed by and interpreted in accordance with the laws of the jurisdiction in which the operator resides, and you submit to the non-exclusive jurisdiction of the state and federal courts located in the country for the resolution of any disputes.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* COOKIE POLICY */}
-                {activeModal === "cookies" && (
-                  <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-3 text-[11px] sm:text-xs text-left font-medium text-gray-600 dark:text-gray-300 scrollbar-thin">
-                    <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
-                      <p className="text-[10px] text-gray-400 font-mono">Last updated: September 17, 2026</p>
-                      <p className="mt-2">Temp-Mail-Generator.site uses a small number of cookies and browser storage items to keep the site functional. We do not use cookies to read the contents of your inbox.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Essential storage</h5>
-                      <p>We use a local browser preference to remember your language, theme, saved messages, and cookie-consent choice. The mailbox session itself is handled by a secure, HttpOnly server cookie and expires with the temporary mailbox.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Analytics and advertising</h5>
-                      <p>If analytics or advertising is enabled in a future deployment, those providers may set their own cookies only under their published policies and applicable consent requirements. The current application does not require advertising cookies to generate or receive email.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">Your choices</h5>
-                      <p>You can clear browser storage or block cookies in your browser settings. Blocking essential storage may prevent the site from remembering preferences or maintaining the active mailbox session.</p>
-                    </div>
+                    {(activeModal === "privacy" ? legal.privacy : activeModal === "terms" ? legal.terms : legal.cookies).map((section) => (
+                      <div className="space-y-3" key={section.heading}>
+                        <h5 className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-xs">{section.heading}</h5>
+                        {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                        {section.bullets && (
+                          <ul className="list-disc pl-5 space-y-1">
+                            {section.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -2795,7 +2661,7 @@ export default function App() {
                   onClick={() => setActiveModal(null)}
                   className="px-5 py-2 text-xs font-bold bg-[#f0f4ff] dark:bg-gray-800 text-blue-600 dark:text-blue-300 rounded-xl hover:bg-blue-100 transition-all cursor-pointer border-0"
                 >
-                  Close Window
+                  {legal.close}
                 </button>
               </div>
 
@@ -2952,7 +2818,7 @@ export default function App() {
             className="fixed bottom-0 left-0 right-0 z-[60] bg-white dark:bg-[#161b22] border-t border-gray-200 dark:border-gray-800 p-4 sm:p-5 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto rounded-t-3xl"
           >
             <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold max-w-3xl text-center sm:text-left leading-relaxed">
-              We use essential cookies and browser storage to keep your temporary mailbox and preferences working. No advertising cookies are required. Read our <button onClick={() => setActiveModal("cookies")} className="text-[#00b074] hover:underline bg-transparent border-0 p-0 font-bold cursor-pointer">Cookie Policy</button> for details.
+              {t.cookieConsentText} <button onClick={() => setActiveModal("cookies")} className="text-[#00b074] hover:underline bg-transparent border-0 p-0 font-bold cursor-pointer">{legal.cookiesTitle}</button>
             </p>
             <button
               onClick={acceptCookies}
