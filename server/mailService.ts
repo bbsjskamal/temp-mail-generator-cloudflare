@@ -44,7 +44,7 @@ const addressByAlias = new Map<string, string>();
 let cachedDomains: { domains: string[]; expiresAt: number } | null = null;
 
 const configuredCookieSecret = process.env.JWT_SECRET;
-if (process.env.NODE_ENV === "production" && !configuredCookieSecret) {
+if (process.env.NODE_ENV === "production" && !configuredCookieSecret && process.env.CF_WORKERS !== "1") {
   throw new Error("JWT_SECRET must be configured in production.");
 }
 
