@@ -8,12 +8,9 @@ interface WorkerEnv {
 }
 
 const workerEnv = env as unknown as WorkerEnv;
-if (!workerEnv.JWT_SECRET) {
-  throw new Error("JWT_SECRET must be configured as a Cloudflare Worker secret.");
-}
 
 process.env["CF_WORKERS"] = "1";
-process.env.JWT_SECRET = workerEnv.JWT_SECRET;
+if (workerEnv.JWT_SECRET) process.env.JWT_SECRET = workerEnv.JWT_SECRET;
 process.env.APP_URL = workerEnv.APP_URL || "https://temp-mail-generator.site";
 
 const mailService = await import("../server/mailService");
@@ -157,6 +154,10 @@ async function handle(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const path = url.pathname;
+
+  if (!workerEnv.JWT_SECRET) {
+    return json(request, { error: "Worker secret configuration is incomplete." }, 503);
+  }
 
   if (path === "/api/health" && request.method === "GET") {
     try {
