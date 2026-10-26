@@ -186,9 +186,12 @@ async function createAccountWithRetry(address: string, password: string): Promis
     body: JSON.stringify({ address, password }),
   });
 
-  for (let attempt = 0; attempt < 2 && response.status === 429; attempt++) {
-    const retryAfter = Number(response.headers.get("retry-after") || 2);
-    await new Promise((resolve) => setTimeout(resolve, Math.min(10_000, Math.max(1_000, retryAfter * 1_000))));
+  const isRetryable = (status: number) => [408, 429, 500, 502, 503, 504].includes(status);
+  for (let attempt = 0; attempt < 4 && isRetryable(response.status); attempt++) {
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const serverDelay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : 1_500 * (2 ** attempt);
+    const jitter = Math.floor(Math.random() * 400);
+    await new Promise((resolve) => setTimeout(resolve, Math.min(12_000, Math.max(1_000, serverDelay + jitter))));
     response = await fetch(`${API_BASE}/accounts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
