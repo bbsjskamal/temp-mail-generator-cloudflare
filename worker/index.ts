@@ -106,7 +106,7 @@ function safeAttachmentUrl(value: unknown): string {
   if (url.startsWith("/api/") && !url.includes("//")) return url;
   try {
     const parsed = new URL(url);
-    return parsed.origin === "https://api.mail.tm" ? url : "";
+    return ["https://api.mail.tm", "https://api.mail.gw"].includes(parsed.origin) ? url : "";
   } catch {
     return "";
   }
@@ -165,7 +165,7 @@ async function handle(request: Request): Promise<Response> {
   if (path === "/api/health" && request.method === "GET") {
     try {
       const domains = await getActiveDomains();
-      return json(request, { status: "ok", provider: "mail.tm", domainsCount: domains.length, domains, timestamp: new Date().toISOString() });
+      return json(request, { status: "ok", provider: "mail.gw", domainsCount: domains.length, domains, timestamp: new Date().toISOString() });
     } catch {
       return json(request, { status: "error", message: "Health check temporarily unavailable." }, 503);
     }
