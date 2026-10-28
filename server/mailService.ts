@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const USER_AGENT = "TempMailGenerator/2.0 (Mozilla/5.0 compatible)";
-const API_BASE = "https://api.mail.gw";
+const API_BASE = process.env.MAIL_API_BASE || "https://api.mail.tm";
 
 export interface MailAttachment {
   id: string;
@@ -153,7 +153,7 @@ export async function getActiveDomains(): Promise<string[]> {
     console.error("[MailService] Failed to fetch active domains:", error);
   }
 
-  return cachedDomains?.domains || ["mail.gw"];
+  return cachedDomains?.domains || ["mail.tm"];
 }
 
 async function loginToMailtm(address: string, password: string): Promise<string> {
@@ -168,12 +168,12 @@ async function loginToMailtm(address: string, password: string): Promise<string>
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Mail.gw token acquisition failed (${res.status}): ${text}`);
+    throw new Error(`Mail provider token acquisition failed (${res.status}): ${text}`);
   }
 
   const json: any = await res.json();
   if (!json.token) {
-    throw new Error("Mail.gw response lacked token");
+    throw new Error("Mail provider response lacked token");
   }
 
   return json.token;
@@ -206,7 +206,7 @@ export async function createMailSession(requestedLogin?: string, requestedDomain
   const activeDomains = await getActiveDomains();
   const domain = requestedDomain && activeDomains.includes(requestedDomain.toLowerCase())
     ? requestedDomain.toLowerCase()
-    : activeDomains[0] || "mail.gw";
+    : activeDomains[0] || "mail.tm";
 
   const cleanPrefix = (requestedLogin || "")
     .toLowerCase()

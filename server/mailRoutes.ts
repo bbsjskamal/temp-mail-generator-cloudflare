@@ -96,7 +96,7 @@ function setMailboxCookie(res: express.Response, session: Awaited<ReturnType<typ
   res.cookie("tm_session", encodeSessionCookie(session), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production" || process.env.CF_WORKERS === "1",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: Math.max(1, session.expiresAt - Date.now()),
     path: "/",
   });

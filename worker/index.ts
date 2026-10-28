@@ -5,6 +5,7 @@ interface WorkerEnv {
   JWT_SECRET?: string;
   APP_URL?: string;
   FRONTEND_ORIGINS?: string;
+  MAIL_API_BASE?: string;
 }
 
 const workerEnv = env as unknown as WorkerEnv;
@@ -12,6 +13,7 @@ const workerEnv = env as unknown as WorkerEnv;
 process.env["CF_WORKERS"] = "1";
 if (workerEnv.JWT_SECRET) process.env.JWT_SECRET = workerEnv.JWT_SECRET;
 process.env.APP_URL = workerEnv.APP_URL || "https://temp-mail-generator.site";
+process.env.MAIL_API_BASE = workerEnv.MAIL_API_BASE || "https://api.mail.gw";
 
 const mailService = await import("../server/mailService");
 const {
